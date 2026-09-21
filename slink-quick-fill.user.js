@@ -1,297 +1,136 @@
 // ==UserScript==
 // @name         S-Link Quick Fill
-// @namespace    https://github.com/GiaHung07/slink-quick-fill
-// @version      1.0.0
-// @description  Điền nhanh S-Link.
+// @version      1.1.0
 // @match        https://slink.ptit.edu.vn/*
 // @run-at       document-idle
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/GiaHung07/slink-quick-fill/main/slink-quick-fill.user.js
-// @downloadURL  https://raw.githubusercontent.com/GiaHung07/slink-quick-fill/main/slink-quick-fill.user.js
 // ==/UserScript==
 
 (() => {
   "use strict";
 
-  const BUTTON_ID = "slink-quick-fill-button";
+  // ===== CONFIG =====
+  const YEAR = 2;      // 1-4
+  const SCORE_5 = 0;   // 0=random 4-5 | hoặc 4 / 5
+  const SCORE_10 = 0;  // 0=random 8-10 | hoặc 8 / 9 / 10
+  // ==================
 
-  const normalize = (s) =>
-    String(s || "")
-      .normalize("NFC")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
+  const norm = s => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const rand = a => a[Math.floor(Math.random() * a.length)];
 
-  const visible = (el) => {
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+  const click = el => {
+    if (el && !el.checked && !el.disabled)
+      (el.closest("label") || el).click();
   };
 
-  function required(question) {
-    return Boolean(
-      question.querySelector(".question-title .required") ||
-      question.querySelector('[aria-required="true"]')
+  const choose = (q, value) => {
+    for (const label of q.querySelectorAll("label")) {
+      if (norm(label.textContent).includes(norm(value))) {
+        click(label.querySelector("input"));
+        return true;
+      }
+    }
+    return false;
+  };
+
+  function fillTable(q) {
+    const table = q.querySelector("table");
+    if (!table) return false;
+
+    const score = SCORE_5 === 0
+      ? rand([4, 5])
+      : Math.min(5, Math.max(4, SCORE_5));
+
+    const headers = [...table.querySelectorAll("thead th")];
+    const col = headers.findIndex(h =>
+      norm(h.textContent).startsWith(String(score))
     );
-  }
 
-  function questionTitle(question) {
-    return normalize(
-      question.querySelector(".question-title")?.textContent
-    );
-  }
+    if (col < 0) return false;
 
-  function clickInput(input) {
-    if (!input || input.disabled || input.checked) return false;
+    table.querySelectorAll("tbody tr:not([aria-hidden='true'])")
+      .forEach(row => {
+        if (row.querySelector("input:checked")) return;
+        const cells = row.querySelectorAll(":scope > td");
+        click(cells[col]?.querySelector("input"));
+      });
 
-    (input.closest("label") || input).click();
     return true;
   }
 
-  function hasSelection(container) {
-    return Boolean(
-      container.querySelector(
-        'input[type="radio"]:checked, input[type="checkbox"]:checked'
+  function fill() {
+    document.querySelectorAll(".question-item").forEach(q => {
+      // Chỉ câu bắt buộc (*)
+      if (
+        !q.querySelector(".required") &&
+        !q.querySelector('[aria-required="true"]')
+      ) return;
+
+      if (fillTable(q)) return;
+      if (q.querySelector("input:checked")) return;
+
+      const title = norm(q.querySelector(".question-title")?.textContent);
+
+      if (title.includes("hình thức học tập"))
+        return choose(q, "học trực tuyến hoàn toàn");
+
+      if (title.includes("thiết bị sử dụng chủ yếu"))
+        return choose(q, "máy tính/laptop");
+
+      if (title.includes("mức độ hoàn thành"))
+        return choose(q, "100%");
+
+      if (title.includes("sinh viên năm mấy"))
+        return choose(q, `năm ${YEAR}`);
+
+      if (
+        title.includes("hình thức học nào") &&
+        title.includes("hiệu quả nhất")
       )
-    );
-  }
+        return choose(q, "học hoàn toàn qua bài giảng điện tử");
 
-  function chooseByText(question, choices) {
-    if (hasSelection(question)) return false;
+      // Nếu câu có thang 1-10
+      const score = SCORE_10 === 0
+        ? rand([8, 9, 10])
+        : Math.min(10, Math.max(8, SCORE_10));
 
-    const targets = choices.map(normalize);
-
-    for (const label of question.querySelectorAll("label")) {
-      const labelText = normalize(label.textContent);
-
-      if (!targets.some((x) => labelText.includes(x))) {
-        continue;
-      }
-
-      const input = label.querySelector(
-        'input[type="radio"], input[type="checkbox"]'
-      );
-
-      if (clickInput(input)) return true;
-    }
-
-    return false;
-  }
-  function fillLikert(question) {
-    const table = question.querySelector("table");
-    if (!table) return false;
-
-    const headers = [...table.querySelectorAll("thead th")];
-
-    const columnIndex = headers.findIndex((th) => {
-      const t = normalize(th.textContent);
-
-      return (
-        t.includes("5 - rất đồng ý") ||
-        t.includes("5 – rất đồng ý") ||
-        t.includes("5 - rất hài lòng") ||
-        t.includes("5 – rất hài lòng") ||
-        t.includes("rất đồng ý")
-      );
+      choose(q, String(score));
     });
-
-    if (columnIndex < 0) return false;
-
-    let changed = false;
-
-    const rows = [...table.querySelectorAll("tbody tr")].filter(
-      (row) =>
-        row.getAttribute("aria-hidden") !== "true" &&
-        visible(row)
-    );
-
-    for (const row of rows) {
-      if (hasSelection(row)) continue;
-
-      const cells = [...row.querySelectorAll(":scope > td")];
-      const cell = cells[columnIndex];
-
-      if (!cell) continue;
-
-      const input = cell.querySelector(
-        'input[type="radio"], input[type="checkbox"]'
-      );
-
-      if (clickInput(input)) changed = true;
-    }
-
-    return changed;
   }
 
-  function fillScore10(question) {
-    if (hasSelection(question)) return false;
-
-    const labels = [...question.querySelectorAll("label")];
-
-    const nine = labels.find(
-      (label) => normalize(label.textContent) === "9"
-    );
-
-    const ten = labels.find(
-      (label) => normalize(label.textContent) === "10"
-    );
-
-    if (!nine || !ten) return false;
-
-    const random = new Uint32Array(1);
-    crypto.getRandomValues(random);
-
-    const selected = random[0] % 2 === 0 ? nine : ten;
-
-    return clickInput(
-      selected.querySelector(
-        'input[type="radio"], input[type="checkbox"]'
-      )
-    );
-  }
-
-  function fillKnownQuestion(question) {
-    const title = questionTitle(question);
-
-    if (title.includes("hình thức học tập")) {
-      return chooseByText(question, [
-        "học trực tuyến hoàn toàn",
-        "e-learning 100%"
-      ]);
-    }
-
-    if (title.includes("thiết bị sử dụng chủ yếu")) {
-      return chooseByText(question, [
-        "máy tính/laptop"
-      ]);
-    }
-
-    if (title.includes("mức độ hoàn thành bài giảng")) {
-      return chooseByText(question, [
-        "100% (hoàn thành toàn bộ)",
-        "100%"
-      ]);
-    }
-
-    if (title.includes("bạn là sinh viên năm mấy")) {
-      return chooseByText(question, [
-        "năm 2"
-      ]);
-    }
-
+  function addButton() {
     if (
-      title.includes("hình thức học nào") &&
-      title.includes("hiệu quả nhất")
-    ) {
-      return chooseByText(question, [
-        "học hoàn toàn qua bài giảng điện tử"
-      ]);
-    }
+      document.getElementById("quick-fill") ||
+      !document.querySelector(".question-item")
+    ) return;
 
-    return false;
-  }
+    const btn = document.createElement("button");
+    btn.id = "quick-fill";
+    btn.type = "button";
+    btn.textContent = "Điền Nhanh";
+    btn.onclick = fill;
 
-  function quickFill() {
-    const questions = [
-      ...document.querySelectorAll(".question-item")
-    ].filter(visible);
-
-    for (const question of questions) {
-      if (!required(question)) continue;
-      if (question.querySelector("table")) {
-        fillLikert(question);
-        continue;
-      }
-      if (hasSelection(question)) continue;
-
-      if (fillScore10(question)) continue;
-
-      fillKnownQuestion(question);
-    }
-  }
-
-  function injectButton() {
-    if (document.getElementById(BUTTON_ID)) return;
-
-    if (!document.querySelector(".question-item")) return;
-
-    const button = document.createElement("button");
-
-    button.id = BUTTON_ID;
-    button.type = "button";
-    button.textContent = "Điền Nhanh";
-
-    Object.assign(button.style, {
+    Object.assign(btn.style, {
       position: "fixed",
-      right: "92px",
+      right: "90px",
       bottom: "24px",
-      zIndex: "2147483647",
-
-      height: "40px",
-      padding: "0 18px",
-
-      border: "1px solid rgba(255,255,255,.12)",
+      zIndex: "999999",
+      padding: "10px 18px",
+      border: "0",
       borderRadius: "9px",
-
       background: "#202124",
       color: "#fff",
-
-      fontFamily:
-        '-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif',
-
       fontSize: "13px",
       fontWeight: "600",
-
-      boxShadow: "0 5px 18px rgba(0,0,0,.22)",
       cursor: "pointer",
-
-      transition:
-        "background .12s ease, transform .12s ease"
+      boxShadow: "0 4px 14px #0003"
     });
 
-    button.addEventListener("mouseenter", () => {
-      button.style.background = "#2b2d31";
-    });
-
-    button.addEventListener("mouseleave", () => {
-      button.style.background = "#202124";
-    });
-
-    button.addEventListener("mousedown", () => {
-      button.style.transform = "scale(.97)";
-    });
-
-    button.addEventListener("mouseup", () => {
-      button.style.transform = "scale(1)";
-    });
-
-    button.addEventListener("click", quickFill);
-
-    document.body.appendChild(button);
+    document.body.appendChild(btn);
   }
-  let queued = false;
 
-  const observer = new MutationObserver(() => {
-    if (queued) return;
+  new MutationObserver(addButton)
+    .observe(document.body, { childList: true, subtree: true });
 
-    queued = true;
-
-    requestAnimationFrame(() => {
-      queued = false;
-      injectButton();
-    });
-  });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
-
-  window.addEventListener("hashchange", () => {
-    setTimeout(injectButton, 250);
-  });
-
-  injectButton();
-  setTimeout(injectButton, 500);
-  setTimeout(injectButton, 1500);
+  addButton();
 })();
