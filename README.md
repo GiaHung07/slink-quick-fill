@@ -9,7 +9,7 @@ Userscript hỗ trợ điền nhanh các mục bắt buộc trong khảo sát S-
 
 ## Cài đặt
 
-1. Cài Tampermonkey.
+1. Cài Tampermonkey   -> <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank">Tại đây</a>
 2. Mở file `slink-quick-fill.user.js`.
 3. Bấm `Install`.
 4. Mở trang khảo sát S-Link.
